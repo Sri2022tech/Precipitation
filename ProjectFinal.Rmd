@@ -1,0 +1,177 @@
+---
+title: "Project Final"
+output: html_document
+date: "2024-12-4"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      error = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+```
+
+### Introduction
+The five Great Lakes of the United States and Canada constitute the largest freshwater lake system in the world. These lakes and interconnected waterways form a vast basin often referred to as the "North American Mediterranean." The region encompasses numerous major cities in both countries, including Chicago, Detroit, Cleveland, and others, leading to the designation of the Great  Lakes shoreline as the "Third Coast" of the United States, following the East and the West Coasts. The proper management of water levels in the lakes is essential for the safe and normal operation of industry, agriculture, and shipping. The Moses-Saunders Dam directly controls the water levels of Lake Ontario and the Saint Lawrence River. This area is characterized by numerous urban clusters and industrial zones, involving various interests. Therefore, a study of the water level is very important.
+
+We want to figure out if there is a relationship between monthly precipitation and water levels in Lake Ontario. Rainfall is, by definition, one of the main sources of recharge for water bodies. When rainfall increases, water levels in rivers, lakes, and reservoirs usually rise. The rate and magnitude of this rise depend on the intensity, duration, and coverage of the rainfall. However, when there is a large amount of rainfall in a short period, the lake's capacity reaches its upper limit and the change in water level may not be significant. At this time, we do not consider this situation. By studying the linear relationship between the water level of Lake Ontario and the monthly rainfall, we can reasonably predict the future water level changes, and make reasonable theoretical support for the construction of dams and the allocation of water resources.
+
+
+### Background
+https://www.lrd.usace.army.mil/Water-Information/Water-Management/Great 
+>Lakes-and-Harbors/Water-Level-Data/#monthly-mean-water-levels 
+
+https://www.glerl.noaa.gov/pubs/tech_reports/glerl-083/UpdatedFiles/prc 
+> _ont_lake_mon.csv 
+
+The precipitation data for this project was sourced from the National Oceanic 
+and Atmospheric Administration (NOAA), utilizing tools such as rain gauges and 
+satellites to measure total monthly rainfall (in millimeters) within the Lake 
+Ontario region. Water level data was provided by the U.S. Army Corps of 
+Engineers, derived from monitoring stations situated around Lake Ontario. 
+These stations recorded average monthly water levels (in meters). Both datasets 
+are structured with one row representing a single year, and columns 
+corresponding to the months from January to December. The key variables 
+in this analysis are monthly precipitation, serving as the independent variable,
+and monthly water levels, as the dependent variable. This data allows us to 
+investigate the relationship between rainfall and water levels in Lake Ontario. 
+While representing a sample from the larger historical weather and lake 
+monitoring records of the Great Lakes region, it provides valuable insights
+into the broader patterns of how precipitation influences water levels. 
+
+
+### Analysis
+Initial Impressions - As seen in the figure below, there appears to be a weak positive relationship between monthly precipitation and water levels in Lake Ontario. However, the scatterplot shows substantial variability, suggesting that precipitation alone may not fully explain changes in water levels.
+
+
+```{r}
+
+water_levels <- read.csv("~/Desktop/STAT 240/project/Lake-Onta-water-lvl-mean.csv", header = TRUE)
+precipitation <- read.csv("~/Desktop/STAT 240/project/lake-ont-percipitation.csv", header = TRUE)
+
+precipitation <- precipitation %>%
+  mutate(across(.cols = Jan:Dec, .fns = ~ as.numeric(as.character(.))))
+
+precipitation_long <- precipitation %>%
+  pivot_longer(
+    cols = -YYYY, 
+    names_to = "Month", 
+    values_to = "Precipitation"
+  ) %>%
+  rename(Year = YYYY)
+
+water_levels_long <- water_levels %>%
+  pivot_longer(
+    cols = -Year, 
+    names_to = "Month", 
+    values_to = "Water_Level"
+  )
+
+# Merge the datasets
+merged_data <- inner_join(precipitation_long, water_levels_long, by = c("Year", "Month"))
+
+# Convert Month to an ordered factor
+merged_data$Month <- factor(
+  merged_data$Month, 
+  levels = month.abb, 
+  ordered = TRUE
+)
+
+# Scatterplot of Precipitation vs. Water Levels
+ggplot(merged_data, aes(x = Precipitation, y = Water_Level)) +
+  geom_point() +
+  labs(title = "Precipitation vs. Water Levels in Lake Ontario",
+       x = "Monthly Precipitation (mm)",
+       y = "Monthyly Water Level (m)") +
+  theme_minimal()
+
+```
+
+
+While the scatterplot hints at a potential relationship, further statistical analysis is required to determine the strength and significance of this relationship.
+
+
+### Statistical Model
+Let $Y_i$ represent the monthly water levels in Lake Ontario for the $i$-th observation, and let $X_i$ represent the corresponding monthly precipitation. We model the relationship between $X$ and $Y$ using the following simple linear regression equation:
+\[
+Y_i = \beta_0 + \beta_1 X_i + \epsilon_i
+\]
+
+
+Where:
+
+-   $\beta_0$: Intercept (baseline water level when precipitation is zero),
+-   $\beta_1$: Slope (the change in water level per mm of precipitation),
+-   $\epsilon_i$: Residual error term, assumed to follow a normal distribution with mean 0 and constant variance.
+
+
+### Hypotheses
+
+We test the following hypotheses for the slope $\beta_1$:
+
+-   Null Hypothesis ($H_0$): There is no relationship between precipitation and water levels ($\beta_1 = 0$).
+-   Alternative Hypothesis ($H_a$): There is a significant relationship between precipitation and water levels ($\beta_1 \neq 0$).
+
+Using a linear regression model, we test the significance of $\beta_1$.
+
+### Results
+
+```{r}
+model <- lm(Water_Level ~ Precipitation, data = merged_data)
+summary(model)
+```
+
+-   $\beta_0 = 74.68$: The baseline water level when precipitation is zero.
+-   $\beta_1 = 0.001948$: For every additional mm of precipitation, water levels increase by approximately 1.948 mm.
+-   $R^2 = 0.03632$: Precipitation explains only 3.63% of the variance in water levels.
+-   $p = 0.00233$: The slope is statistically significant at the 0.05 level.
+
+```{r}
+cleaned_data <- merged_data %>%
+  filter(!is.na(Precipitation), !is.na(Water_Level))
+
+model <- lm(Water_Level ~ Precipitation, data = cleaned_data)
+cleaned_data$residuals <- resid(model)
+
+# Residual analysis plot
+ggplot(cleaned_data, aes(x = Precipitation, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residual Plot",
+       x = "Precipitation (mm)",
+       y = "Residuals") +
+  theme_minimal()
+```
+
+The residual plot shows no clear patterns, indicating that the model satisfies the assumptions of homoscedasticity and linearity.
+
+### Discussion
+
+**Interpretation of Results:**
+
+The results indicate a statistically significant positive relationship between monthly precipitation and water levels in Lake Ontario. However, the $R^2$ value (0.03632) suggests that precipitation alone explains only a small portion of the variability in water levels. This finding highlights that other factors, such as dam operations, inflows, and evaporation, likely play a larger role in determining water levels.
+
+
+**Shortcomings and Future Work:**
+
+Several limitations must be acknowledged:
+
+-   Low Predictive Power: The $R^2$ value indicates that the model explains only a small fraction of the variability in water levels.
+-   Exclusion of Key Factors: Other important factors, such as seasonal inflows, evaporation, and human interventions like dam operations, were not included in the model.
+-   Seasonality: The analysis does not account for potential seasonal patterns in precipitation and water levels.
+
+**Recommendations**
+
+-   1. Incorporate additional predictors, such as evaporation rates, tributary inflows, and dam operations.
+-   2. Conduct seasonal analyses to determine whether the relationship between precipitation and water levels varies across seasons.
+-   3. Use non-linear or time-series models to better capture the dynamics of water level changes.
+
+
+### Conclusion
+
+Our analysis reveals that there is a slight positive relationship between monthly rainfall and the water levels of Lake Ontario. This means that when it rains more, the water level in the lake generally rises. However, this relationship is not very strong, suggesting that other factors, such as dam operations, inflows from rivers, and evaporation, also have significant impacts on the water levels.  
+
+
